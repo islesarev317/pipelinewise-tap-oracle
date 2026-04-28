@@ -82,6 +82,17 @@ def sync_view(conn_config, stream, state, desired_columns):
    connection.close()
    return state
 
+
+def get_custom_where(conn_config, schema, table):
+    where_map = conn_config.get("custom_where_clauses") or {}
+
+    # нормализация регистра
+    key = f"{schema}-{table}".upper()
+    where_map = {k.upper(): v for k, v in where_map.items()}
+
+    return where_map.get(key)
+
+
 def sync_table(conn_config, stream, state, desired_columns):
    connection = orc_db.open_connection(conn_config)
    connection.outputtypehandler = common.OutputTypeHandler
@@ -128,6 +139,8 @@ def sync_table(conn_config, stream, state, desired_columns):
      
       counter.tags["schema"] = escaped_schema
       counter.tags["table"] = escaped_table
+
+      custom_where = get_custom_where(conn_config, escaped_schema, escaped_table)
      
       ora_rowscn = singer.get_bookmark(state, stream.tap_stream_id, 'ORA_ROWSCN')
       if not USE_ORA_ROWSCN:
@@ -136,22 +149,36 @@ def sync_table(conn_config, stream, state, desired_columns):
                                 FROM {}.{}""".format(','.join(escaped_columns),
                                            escaped_schema,
                                            escaped_table)
+         if custom_where:
+            select_sql += f" WHERE {custom_where}"
+
       elif ora_rowscn:
          LOGGER.info("Resuming Full Table replication %s from ORA_ROWSCN %s", nascent_stream_version, ora_rowscn)
+         
+         where_parts = [f"ORA_ROWSCN >= {ora_rowscn}"]
+         if custom_where:
+            where_parts.append(f"({custom_where})")
+         
          select_sql      = """SELECT {}, ORA_ROWSCN
                                 FROM {}.{}
-                               WHERE ORA_ROWSCN >= {}
+                               WHERE {}
                                ORDER BY ORA_ROWSCN ASC
                                 """.format(','.join(escaped_columns),
                                            escaped_schema,
                                            escaped_table,
-                                           ora_rowscn)
+                                           " AND ".join(where_parts))
       else:
+         where_clause = ""
+         if custom_where:
+            where_clause = f"WHERE {custom_where}"
+
          select_sql      = """SELECT {}, ORA_ROWSCN
                                 FROM {}.{}
+                                {}
                                ORDER BY ORA_ROWSCN ASC""".format(','.join(escaped_columns),
                                                                     escaped_schema,
-                                                                    escaped_table)
+                                                                    escaped_table,
+                                                                    where_clause)
 
       rows_saved = 0
       LOGGER.info("select %s", select_sql)
