@@ -32,6 +32,8 @@ def sync_view(conn_config, stream, state, desired_columns):
    cur.execute("""ALTER SESSION SET NLS_TIMESTAMP_TZ_FORMAT  = 'YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM'""")
    time_extracted = utils.now()
 
+   apply_stream_alias(stream, conn_config)
+
    #before writing the table version to state, check if we had one to begin with
    first_run = singer.get_bookmark(state, stream.tap_stream_id, 'version') is None
 
@@ -93,6 +95,18 @@ def get_custom_where(conn_config, schema, table):
     return where_map.get(key)
 
 
+def apply_stream_alias(stream, conn_config):
+    aliases = conn_config.get("stream_aliases") or {}
+    stream_id = stream.tap_stream_id
+
+    if stream_id in aliases:
+        new_stream = aliases[stream_id]
+
+        LOGGER.info("Applying alias: %s -> %s", stream_id, new_stream)
+
+        stream.tap_stream_id = new_stream
+
+
 def sync_table(conn_config, stream, state, desired_columns):
    connection = orc_db.open_connection(conn_config)
    connection.outputtypehandler = common.OutputTypeHandler
@@ -104,6 +118,8 @@ def sync_table(conn_config, stream, state, desired_columns):
    cur.execute("""ALTER SESSION SET NLS_TIMESTAMP_FORMAT='YYYY-MM-DD"T"HH24:MI:SSXFF"+00:00"'""")
    cur.execute("""ALTER SESSION SET NLS_TIMESTAMP_TZ_FORMAT  = 'YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM'""")
    time_extracted = utils.now()
+
+   apply_stream_alias(stream, conn_config)
 
    #before writing the table version to state, check if we had one to begin with
    first_run = singer.get_bookmark(state, stream.tap_stream_id, 'version') is None

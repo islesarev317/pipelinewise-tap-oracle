@@ -636,7 +636,8 @@ def main_impl():
                   'common_password': args.config.get('common_password'),
                   'common_sid': args.config.get('common_sid'),
                   'common_service_name': args.config.get('common_service_name'),
-                  'custom_where_clauses': args.config.get('custom_where_clauses')}
+                  'custom_where_clauses': args.config.get('custom_where_clauses'),
+                  'stream_aliases': args.config.get('stream_aliases')}
 
    if args.config.get('scn_window_size'):
       log_miner.SCN_WINDOW_SIZE=int(args.config['scn_window_size'])
