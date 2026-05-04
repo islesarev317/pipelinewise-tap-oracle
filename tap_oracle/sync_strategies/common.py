@@ -7,6 +7,7 @@ import dateutil.parser
 import singer
 from singer import metadata
 from tap_oracle.connection_helper import oracledb
+LOGGER = singer.get_logger()
 
 def should_sync_column(metadata, field_name):
     field_metadata = metadata.get(('properties', field_name), {})
@@ -14,8 +15,11 @@ def should_sync_column(metadata, field_name):
                                     field_metadata.get('selected'),
                                     True)
 
+def get_stream_name(stream, conn_config):
+    aliases = conn_config.get("stream_aliases") or {}
+    return aliases.get(stream.tap_stream_id, stream.tap_stream_id)
 
-def send_schema_message(stream, bookmark_properties):
+def send_schema_message(stream, conn_config, bookmark_properties):
     s_md = metadata.to_map(stream.metadata)
     if s_md.get((), {}).get('is-view'):
         key_properties = s_md.get((), {}).get('view-key-properties')
@@ -24,7 +28,11 @@ def send_schema_message(stream, bookmark_properties):
     else:
         key_properties = s_md.get((), {}).get('table-key-properties')
 
-    schema_message = singer.SchemaMessage(stream=stream.tap_stream_id,
+    stream_name = get_stream_name(stream, conn_config)
+
+    LOGGER.info("STREAM OUT: %s -> %s", stream.tap_stream_id, stream_name)
+
+    schema_message = singer.SchemaMessage(stream=stream_name,
                                           schema=stream.schema.to_dict(),
                                           key_properties=key_properties,
                                           bookmark_properties=bookmark_properties)
@@ -34,7 +42,7 @@ def send_schema_message(stream, bookmark_properties):
 # NB: If a number exceeds this length, we should normalize it to attempt to persist properly.
 MAX_DECIMAL_DIGITS = 101
 
-def row_to_singer_message(stream, row, version, columns, time_extracted):
+def row_to_singer_message(stream, row, version, columns, time_extracted, conn_config):
     row_to_persist = ()
     for idx, elem in enumerate(row):
         property_type = stream.schema.properties[columns[idx]].type
@@ -65,8 +73,12 @@ def row_to_singer_message(stream, row, version, columns, time_extracted):
 
     rec = dict(zip(columns, row_to_persist))
 
+    stream_name = get_stream_name(stream, conn_config)
+
+    LOGGER.info("STREAM OUT: %s -> %s", stream.tap_stream_id, stream_name)
+
     return singer.RecordMessage(
-       stream=stream.tap_stream_id,
+       stream=stream_name,
        record=rec,
        version=version,
        time_extracted=time_extracted)

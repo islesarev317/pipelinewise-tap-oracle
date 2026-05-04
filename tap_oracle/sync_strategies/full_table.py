@@ -32,8 +32,6 @@ def sync_view(conn_config, stream, state, desired_columns):
    cur.execute("""ALTER SESSION SET NLS_TIMESTAMP_TZ_FORMAT  = 'YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM'""")
    time_extracted = utils.now()
 
-   # apply_stream_alias(stream, conn_config)
-
    #before writing the table version to state, check if we had one to begin with
    first_run = singer.get_bookmark(state, stream.tap_stream_id, 'version') is None
 
@@ -52,8 +50,13 @@ def sync_view(conn_config, stream, state, desired_columns):
    escaped_columns = map(lambda c: common.prepare_columns_sql(stream, c), desired_columns)
    escaped_schema  = schema_name
    escaped_table   = stream.table
+
+   stream_name = common.get_stream_name(stream, conn_config)
+
+   LOGGER.info("ACTIVATE STREAM: %s -> %s", stream.tap_stream_id, stream_name)
+
    activate_version_message = singer.ActivateVersionMessage(
-      stream=stream.tap_stream_id,
+      stream=stream_name,
       version=nascent_stream_version)
 
    if first_run:
@@ -74,7 +77,8 @@ def sync_view(conn_config, stream, state, desired_columns):
                                                        row,
                                                        nascent_stream_version,
                                                        desired_columns,
-                                                       time_extracted)
+                                                       time_extracted,
+                                                       conn_config)
          singer.write_message(record_message)
          counter.increment()
 
@@ -94,21 +98,6 @@ def get_custom_where(conn_config, schema, table):
 
     return where_map.get(key)
 
-
-def apply_stream_alias(stream, conn_config):
-    aliases = conn_config.get("stream_aliases") or {}
-    stream_id = stream.tap_stream_id
-
-    LOGGER.info("Def apply_stream_alias: %s -> %s", stream_id, str(aliases))
-
-    if stream_id in aliases:
-        new_stream = aliases[stream_id]
-
-        LOGGER.info("Applying alias: %s -> %s", stream_id, new_stream)
-
-        stream.tap_stream_id = new_stream
-
-
 def sync_table(conn_config, stream, state, desired_columns):
    connection = orc_db.open_connection(conn_config)
    connection.outputtypehandler = common.OutputTypeHandler
@@ -120,8 +109,6 @@ def sync_table(conn_config, stream, state, desired_columns):
    cur.execute("""ALTER SESSION SET NLS_TIMESTAMP_FORMAT='YYYY-MM-DD"T"HH24:MI:SSXFF"+00:00"'""")
    cur.execute("""ALTER SESSION SET NLS_TIMESTAMP_TZ_FORMAT  = 'YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM'""")
    time_extracted = utils.now()
-
-   # apply_stream_alias(stream, conn_config)
 
    #before writing the table version to state, check if we had one to begin with
    first_run = singer.get_bookmark(state, stream.tap_stream_id, 'version') is None
@@ -146,8 +133,11 @@ def sync_table(conn_config, stream, state, desired_columns):
    escaped_columns = map(lambda c: common.prepare_columns_sql(stream, c), desired_columns)
    escaped_schema  = schema_name
    escaped_table   = stream.table
+
+   stream_name = common.get_stream_name(stream, conn_config)
+
    activate_version_message = singer.ActivateVersionMessage(
-      stream=stream.tap_stream_id,
+      stream=stream_name,
       version=nascent_stream_version)
 
    if first_run:
@@ -207,7 +197,8 @@ def sync_table(conn_config, stream, state, desired_columns):
                                                        row,
                                                        nascent_stream_version,
                                                        desired_columns,
-                                                       time_extracted)
+                                                       time_extracted,
+                                                       conn_config)
 
          singer.write_message(record_message)
          state = singer.write_bookmark(state, stream.tap_stream_id, 'ORA_ROWSCN', ora_rowscn)

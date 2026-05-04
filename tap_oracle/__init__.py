@@ -289,7 +289,7 @@ def produce_column_metadata(connection, database_name, table_info, table_schema,
 
    return mdata
 
-def discover_columns(connection, table_info, filter_schemas, filter_tables, use_singer_decimal):
+def discover_columns(connection, table_info, filter_schemas, filter_tables, use_singer_decimal, conn_config):
    cur = connection.cursor()
    binds_sql = [":{}".format(b) for b in range(len(filter_schemas))]
    filter = filter_sys_or_not(filter_schemas)
@@ -355,10 +355,13 @@ def discover_columns(connection, table_info, filter_schemas, filter_tables, use_
                                    pk_constraints,
                                    column_schemas,
                                    cols)
+      
+      stream_id = table_schema + '-' + table_name
+      alias = conn_config.get("stream_aliases", {}).get(stream_id, stream_id)
 
       entry = CatalogEntry(
          table=table_name,
-         stream=table_name,
+         stream=alias,
          metadata=metadata.to_list(md),
          tap_stream_id=table_schema + '-' + table_name,
          schema=schema)
@@ -429,7 +432,7 @@ def do_discovery(conn_config, filter_schemas, filter_tables, use_singer_decimal)
         'is_view': True
      }
 
-   catalog = discover_columns(connection, table_info, filter_schemas, filter_tables, use_singer_decimal)
+   catalog = discover_columns(connection, table_info, filter_schemas, filter_tables, use_singer_decimal, conn_config)
    dump_catalog(catalog)
    cur.close()
    connection.close()
@@ -456,7 +459,7 @@ def do_sync_incremental(conn_config, stream, state, desired_columns):
 
    state = singer.write_bookmark(state, stream.tap_stream_id, 'replication_key', replication_key)
 
-   common.send_schema_message(stream, [replication_key])
+   common.send_schema_message(stream, conn_config, [replication_key])
    state = incremental.sync_table(conn_config, stream, state, desired_columns)
 
    return state
@@ -550,7 +553,7 @@ def sync_traditional_stream(conn_config, stream, state, sync_method, end_scn):
    if sync_method == 'full':
       LOGGER.info("Stream %s is using full_table replication", stream.tap_stream_id)
       state = singer.set_currently_syncing(state, stream.tap_stream_id)
-      common.send_schema_message(stream, [])
+      common.send_schema_message(stream, conn_config, [])
       if md_map.get((), {}).get('is-view'):
          state = full_table.sync_view(conn_config, stream, state, desired_columns)
       else:
@@ -562,12 +565,12 @@ def sync_traditional_stream(conn_config, stream, state, sync_method, end_scn):
 
       state = singer.write_bookmark(state, stream.tap_stream_id, 'scn', end_scn)
 
-      common.send_schema_message(stream, [])
+      common.send_schema_message(stream, conn_config, [])
       state = full_table.sync_table(conn_config, stream, state, desired_columns)
    elif sync_method == 'log_initial_interrupted':
       LOGGER.info("Initial stage of full table sync was interrupted. resuming...")
       state = singer.set_currently_syncing(state, stream.tap_stream_id)
-      common.send_schema_message(stream, [])
+      common.send_schema_message(stream, conn_config, [])
       state = full_table.sync_table(conn_config, stream, state, desired_columns)
    elif sync_method == 'incremental':
       state = singer.set_currently_syncing(state, stream.tap_stream_id)
