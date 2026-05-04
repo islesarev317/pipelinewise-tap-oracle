@@ -71,7 +71,7 @@ def row_to_singer_message(stream, row, version, columns, time_extracted, conn_co
         else:
             row_to_persist += (elem,)
 
-    rec = dict(zip(columns, row_to_persist))
+    rec = dict(zip([c.lower() for c in columns], row_to_persist))
 
     stream_name = get_stream_name(stream, conn_config)
 
