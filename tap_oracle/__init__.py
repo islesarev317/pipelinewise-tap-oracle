@@ -357,7 +357,10 @@ def discover_columns(connection, table_info, filter_schemas, filter_tables, use_
                                    cols)
       
       stream_id = table_schema + '-' + table_name
-      alias = conn_config.get("stream_aliases", {}).get(stream_id, stream_id)
+
+      LOGGER.info(f"conn_config={conn_config}")
+      alias_map = (conn_config or {}).get("stream_aliases") or {}
+      alias = alias_map.get(stream_id, stream_id)
 
       entry = CatalogEntry(
          table=table_name,
