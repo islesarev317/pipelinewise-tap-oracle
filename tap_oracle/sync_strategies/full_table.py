@@ -99,6 +99,8 @@ def apply_stream_alias(stream, conn_config):
     aliases = conn_config.get("stream_aliases") or {}
     stream_id = stream.tap_stream_id
 
+    LOGGER.info("apply_stream_alias: %s -> %s", stream_id, str(aliases))
+
     if stream_id in aliases:
         new_stream = aliases[stream_id]
 
