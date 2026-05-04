@@ -44,6 +44,7 @@ MAX_DECIMAL_DIGITS = 101
 
 def row_to_singer_message(stream, row, version, columns, time_extracted, conn_config):
     row_to_persist = ()
+    columns = [c.lower() for c in columns]
     for idx, elem in enumerate(row):
         property_type = stream.schema.properties[columns[idx]].type
         property_format = stream.schema.properties[columns[idx]].format
@@ -95,7 +96,7 @@ def OutputTypeHandler(cursor, name, defaultType, size, precision, scale):
 
 
 def prepare_columns_sql(stream, c):
-   column_name = """ "{}" """.format(c)
+   column_name = c
    if 'string' in stream.schema.properties[c].type and stream.schema.properties[c].format == 'date-time':
       return "to_char({})".format(column_name)
    return column_name

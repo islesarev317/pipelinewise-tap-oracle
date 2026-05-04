@@ -257,7 +257,10 @@ def get_database_name(connection):
 def produce_column_metadata(connection, database_name, table_info, table_schema, table_name, pk_constraints, column_schemas, cols):
    mdata = {}
 
-   table_pks = pk_constraints.get(table_schema, {}).get(table_name, [])
+   table_pks = [
+    pk.lower()
+    for pk in pk_constraints.get(table_schema, {}).get(table_name, [])
+   ]
 
    #NB> sadly, some system tables like XDB$STATS have P constraints for columns that do not exist so we must protect against this
    table_pks = list(filter(lambda pk: column_schemas.get(pk, Schema(None)).type is not None, table_pks))
@@ -274,7 +277,7 @@ def produce_column_metadata(connection, database_name, table_info, table_schema,
       if row_count is not None:
          metadata.write(mdata, (), 'row-count', row_count)
    for c in cols:
-      c_name = c.column_name
+      c_name = c.column_name.lower()
       # Write the data_type or "None" when the column has no datatype
       metadata.write(mdata, ('properties', c_name), 'sql-datatype', (c.data_type or "None"))
       if column_schemas[c_name].type is None:
@@ -344,7 +347,7 @@ def discover_columns(connection, table_info, filter_schemas, filter_tables, use_
       (table_schema, table_name) = k
       pks_for_table = pk_constraints.get(table_schema, {}).get(table_name, [])
 
-      column_schemas = {c.column_name : schema_for_column(c, pks_for_table, use_singer_decimal) for c in cols}
+      column_schemas = {c.column_name.lower() : schema_for_column(c, pks_for_table, use_singer_decimal) for c in cols}
       schema = Schema(type='object', properties=column_schemas)
 
       md = produce_column_metadata(connection,
